@@ -4,6 +4,7 @@ from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from .models import *
 from sendEmail.views import *
+import hashlib
 
 # Create your views here.
 def index(request):
@@ -20,7 +21,12 @@ def join(request):
     name = request.POST['signupName']
     email = request.POST['signupEmail']
     pw = request.POST['signupPW']
-    user = User(user_name = name, user_email = email, user_password = pw)
+
+    # pw encryption - SHA-256
+    encoded_pw = pw.encode()
+    encrypted_pw = hashlib.sha256(encoded_pw).hexdigest()
+
+    user = User(user_name = name, user_email = email, user_password = encrypted_pw)
     user.save()
     code = randint(1000,9999)
     response = redirect('main_verifyCode')
@@ -34,7 +40,9 @@ def join(request):
         return response
     else:
         user.delete()
-        return HttpResponse("이메일 발송에 실패했습니다.")
+        content = {'message': '이메일 발송에 실패했습니다.'}
+        return render(request, 'main/error.html', content)
+        # return HttpResponse("이메일 발송에 실패했습니다.")
 
 
 def signin(request):
@@ -43,13 +51,23 @@ def signin(request):
 def login(request):
     loginEmail = request.POST['loginEmail']
     loginPW = request.POST['loginPW']
-    user = User.objects.get(user_email = loginEmail)
-    if user.user_password == loginPW:
+    try:
+        user = User.objects.get(user_email = loginEmail)
+    except:
+        return redirect('main_loginFail')
+
+    encoded_loginPW = loginPW.encode()
+    encrypted_loginPW = hashlib.sha256(encoded_loginPW).hexdigest()
+
+    if user.user_password == encrypted_loginPW:
         request.session['user_name'] = user.user_name
         request.session['user_email'] = user.user_email
         return redirect('main_index')
     else:
-        return redirect('main_signin')
+        return redirect('main_loginFail')
+
+def loginFail(request):
+    return render(request, 'main/loginFail.html')
 
 def logout(request):
     del request.session['user_name']
